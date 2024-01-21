@@ -9,6 +9,7 @@ dask-worker-space/
 *.out
 *.pkl
 *.hdf5
+*.parquet
 *.sub
 *.dat
 *.png
