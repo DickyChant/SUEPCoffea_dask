@@ -13,7 +13,10 @@ import pandas as pd
 import numpy as np
 import fastjet
 from coffea import processor, lookup_tools
-import pickle5 as pickle
+try:
+    import pickle5 as pickle
+except ImportError:
+    import pickle
 import vector
 from typing import List, Optional
 import correctionlib
@@ -22,6 +25,8 @@ import copy
 import json
 
 vector.register_awkward()
+
+import hist
 
 class SUEP_cluster(processor.ProcessorABC):
     def __init__(self, isMC: int, era: int, sample: str,  do_syst: bool, syst_var: str, weight_syst: bool, SRonly: bool, output_location: Optional[str], doOF: Optional[bool], isDY: Optional[bool]) -> None:
@@ -75,7 +80,7 @@ class SUEP_cluster(processor.ProcessorABC):
         evals = np.sort(np.linalg.eigvals(s))
         # eval1 < eval2 < eval3
         return evals
-
+    
     def rho(self, number, jet, tracks, deltaR, dr=0.05):
         r_start = number*dr
         r_end = (number+1)*dr
@@ -124,6 +129,24 @@ class SUEP_cluster(processor.ProcessorABC):
         else:
             print("self.output_location is None")
             store.close()
+
+    def save_constituents(self, constituents, fname=None):
+        if not(fname): fname = "out.parquet"
+        if not fname.endswith(".parquet"):
+            fname = fname.split(".")[0] + ".parquet"
+        subdirs = []
+        if self.output_location is not None:
+            if self.isMC:
+                metadata = dict(gensumweight=self.gensumweight,era=self.era, mc=self.isMC,sample=self.sample)
+            else:
+                metadata = dict(era=self.era, mc=self.isMC,sample=self.sample)
+            ak.to_parquet(constituents, fname)
+            self.dump_table(fname, self.output_location, subdirs)
+        else:
+            print("self.output_location is None")
+
+            
+
 
     def dump_table(self, fname: str, location: str, subdirs: Optional[List[str]] = None) -> None:
         subdirs = subdirs or []
@@ -704,18 +727,29 @@ class SUEP_cluster(processor.ProcessorABC):
             for t in todel:
                 del outputs[t]
 
+        # output_suep_constituents = out['leadingclustertracks_pt_eta_phi']
+        # out.pop('leadingclustertracks_pt_eta_phi')
+        for out in outputs:
+            self.save_constituents(outputs[out][0]['leadingclustertracks'], self.chunkTag)
+            outputs[out][0].pop('leadingclustertracks')
+            # outputs[out][0]
         for out in outputs:
             if out in todel: continue 
             if self.isMC:
                 outputs[out][0]["genweight"] = outputs[out][1].genWeight[:]
+
             if debug: print("Conversion to pandas...")
             if not isinstance(outputs[out][0], pd.DataFrame):
                 if debug: print("......%s"%out)
                 outputs[out][0] = self.ak_to_pandas(outputs[out][0])
 
+
         if debug: print("DFS saving....")
 
         self.save_dfs([outputs[key][0] for key in outputs], [key for key in outputs], self.chunkTag)
+        # self.save_constituents(output_suep_constituents, self.chunkTag)
+
+
 
         return accumulator
    
@@ -1317,6 +1351,29 @@ class SUEP_cluster(processor.ProcessorABC):
 
                     out["leadclusterSpher_L"] =  np.real(1.5*(evalsL[:,0] + evalsL[:,1]))
                     out["leadclusterSpher_C"] =  np.real(1.5*(evalsC[:,0] + evalsC[:,1]))
+
+                    leadingclustertracks_p4 = ak.zip({
+                        "px": leadingclustertracks.px,
+                        "py": leadingclustertracks.py,
+                        "pz": leadingclustertracks.pz,
+                        "mass": leadingclustertracks.mass
+                        })
+
+                    leadingcluster_p4 = ak.zip({
+                        "px": self.clusters[:,0].px,
+                        "py": self.clusters[:,0].py,
+                        "pz": self.clusters[:,0].pz,
+                        "mass": self.clusters[:,0].mass
+                        })
+                        
+                    # out["leadingclustertracks"] = ak.zip({
+                    #     "constituents": leadingclustertracks_p4,
+                    #     "cluster": leadingcluster_p4
+                    #     })
+                    out["leadingclustertracks"] = leadingclustertracks_p4
+                    # out["leadingclustertracks"] = leadetdingcluster_p4 
+                    
+
 
         if self.doGen:
             if debug: print("Saving gen variables")

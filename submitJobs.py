@@ -3,7 +3,7 @@ import os
 import sys
 
 conda_source  = "/afs/cern.ch/user/%s/%s/miniconda3/etc/profile.d/conda.sh"%(os.getlogin()[0], os.getlogin())
-doSingularity = False 
+doSingularity = True 
 print()
 print('START')
 print()
@@ -19,10 +19,12 @@ era         = sys.argv[7]
 isData      = bool(int(sys.argv[8]))
 interval    = int(sys.argv[9])
 doSRonly    = bool(int(sys.argv[10]))
+
+doSubmit = 1
 filt = None
 isDY = False
-resubmission = True
-doSubmit = False
+resubmission = False
+# doSubmit = False
 if len(sys.argv) > 11:
   filt = sys.argv[11]
 if len(sys.argv) > 12:
@@ -93,7 +95,7 @@ while ifile < NumberOfJobs:
           fout.write("export HOME=\"/afs/cern.ch/user/g/gdecastr\"\n")
         for i in range(interval):
           if ifile == NumberOfJobs: continue # Last one will have less
-          fout.write("python condor_SUEP_WS.py  --isMC=%i --era=%s --dataset=%s --analyzer=%s --infile=%s --outputdir=%s %s %s\n"%(0 if isData else 1, era, "ZH" if "SUEP_" in files[ifile] else "DY", analyzer, files[ifile], OutputDir, "--isDY" if isDY else "", "--SR" if doSRonly else "")) 
+          fout.write("python condor_SUEP_WS.py  --doSyst=0 --isMC=%i --era=%s --dataset=%s --analyzer=%s --infile=%s --outputdir=%s %s %s\n"%(0 if isData else 1, era, "ZH" if "SUEP_" in files[ifile] else "DY", analyzer, files[ifile], OutputDir, "--isDY" if isDY else "", "--SR" if doSRonly else "")) 
           ifile += 1
 
         fout.write("echo 'STOP---------------'\n")
@@ -116,11 +118,12 @@ with open('submit.sub', 'w') as fout:
     fout.write('+JobFlavour = "%s"\n' %(queue))
     fout.write("\n")
     fout.write("queue filename matching (%s/exec/job_*sh)\n"%tag)
-    
+print("submitting {} jobs".format(NumberOfJobs))
+print("{}".format(int(doSubmit)))
 ###### sends bjobs ######
 if int(doSubmit) > 0 and NumberOfJobs > 0:
   os.system("echo submit.sub")
-  os.system("condor_submit -spool submit.sub")
+  os.system("condor_submit submit.sub")
    
 print()
 print("your jobs:")
